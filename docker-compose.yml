@@ -1,0 +1,17 @@
+services:
+  whisper-api:
+    build: ./api
+    ports:
+      - "8000:8000"
+    environment:
+      - WHISPER_MODEL=${WHISPER_MODEL:-base}
+    volumes:
+      - ./cache/whisper:/root/.cache/whisper
+
+  telegram-bot:
+    build: ./bot
+    environment:
+      - TELEGRAM_TOKEN=${TELEGRAM_TOKEN}
+      - WHISPER_API_URL=http://whisper-api:8000/transcribe
+    depends_on:
+      - whisper-api

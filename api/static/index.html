@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Whisper — Transcribe</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0d0d0d;
+      --surface: #161616;
+      --border: #2a2a2a;
+      --accent: #e8ff5a;
+      --accent-dim: #b8cc3a;
+      --text: #f0f0f0;
+      --muted: #666;
+      --danger: #ff5a5a;
+      --radius: 4px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 300;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 60px 20px 80px;
+    }
+
+    header {
+      width: 100%;
+      max-width: 640px;
+      margin-bottom: 56px;
+    }
+
+    .logo {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 24px;
+    }
+
+    h1 {
+      font-size: clamp(2rem, 5vw, 3.2rem);
+      font-weight: 300;
+      line-height: 1.1;
+      letter-spacing: -0.02em;
+    }
+
+    h1 em {
+      font-style: italic;
+      color: var(--accent);
+    }
+
+    .subtitle {
+      margin-top: 12px;
+      color: var(--muted);
+      font-size: 14px;
+      letter-spacing: 0.01em;
+    }
+
+    main {
+      width: 100%;
+      max-width: 640px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    /* Drop zone */
+    .dropzone {
+      border: 1px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 48px 32px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      position: relative;
+      background: var(--surface);
+    }
+
+    .dropzone:hover, .dropzone.dragover {
+      border-color: var(--accent);
+      background: #1a1a0a;
+    }
+
+    .dropzone input[type="file"] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+      width: 100%;
+      height: 100%;
+    }
+
+    .dropzone-icon {
+      font-size: 32px;
+      margin-bottom: 12px;
+      display: block;
+    }
+
+    .dropzone-label {
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .dropzone-label span {
+      color: var(--accent);
+    }
+
+    .file-name {
+      margin-top: 10px;
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      color: var(--accent);
+      display: none;
+    }
+
+    /* Record section */
+    .section-divider {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: var(--muted);
+      font-size: 11px;
+      font-family: 'DM Mono', monospace;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+    }
+    .section-divider::before,
+    .section-divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    .record-area {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px 32px;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+
+    #recordBtn {
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      border: none;
+      background: var(--accent);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: transform 0.15s, background 0.2s;
+      position: relative;
+    }
+
+    #recordBtn:hover { transform: scale(1.06); }
+
+    #recordBtn.recording {
+      background: var(--danger);
+      animation: pulse 1.2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(255,90,90,0.4); }
+      50% { box-shadow: 0 0 0 10px rgba(255,90,90,0); }
+    }
+
+    #recordBtn svg { pointer-events: none; }
+
+    .record-info {
+      flex: 1;
+    }
+
+    .record-info .rec-label {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .record-info .rec-status {
+      font-size: 14px;
+      margin-top: 4px;
+      color: var(--text);
+    }
+
+    #timer {
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      color: var(--accent);
+      display: none;
+    }
+
+    /* Submit */
+    #submitBtn {
+      width: 100%;
+      padding: 16px;
+      background: var(--accent);
+      color: #0d0d0d;
+      border: none;
+      border-radius: var(--radius);
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+      font-weight: 500;
+    }
+
+    #submitBtn:hover:not(:disabled) { background: var(--accent-dim); }
+    #submitBtn:active:not(:disabled) { transform: scale(0.99); }
+    #submitBtn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+    /* Status */
+    #status {
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      text-align: center;
+      min-height: 18px;
+      display: none;
+    }
+
+    /* Result */
+    #result {
+      display: none;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .result-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .result-meta {
+      display: flex;
+      gap: 16px;
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .result-meta span { color: var(--accent); }
+
+    #copyBtn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 6px 12px;
+      border-radius: var(--radius);
+      cursor: pointer;
+      transition: border-color 0.2s, color 0.2s;
+    }
+    #copyBtn:hover { border-color: var(--accent); color: var(--accent); }
+
+    #transcript {
+      padding: 24px;
+      font-size: 15px;
+      line-height: 1.7;
+      color: var(--text);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    /* Error */
+    #error {
+      display: none;
+      background: #1a0a0a;
+      border: 1px solid var(--danger);
+      border-radius: var(--radius);
+      padding: 14px 20px;
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      color: var(--danger);
+    }
+
+    /* API hint */
+    .api-hint {
+      margin-top: 40px;
+      width: 100%;
+      max-width: 640px;
+      border-top: 1px solid var(--border);
+      padding-top: 28px;
+    }
+
+    .api-hint h2 {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+
+    .api-hint pre {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      line-height: 1.6;
+      color: #aaa;
+      overflow-x: auto;
+    }
+
+    .api-hint pre .kw { color: var(--accent); }
+    .api-hint pre .str { color: #7dd3a8; }
+  </style>
+</head>
+<body>
+
+<header>
+  <p class="logo">◎ Whisper // Local transcription</p>
+  <h1>Turn <em>speech</em><br>into text.</h1>
+  <p class="subtitle">Upload or record audio — transcribed locally, never leaves your server.</p>
+</header>
+
+<main>
+  <!-- File upload -->
+  <div class="dropzone" id="dropzone">
+    <input type="file" id="fileInput" accept="audio/*" />
+    <span class="dropzone-icon">🎵</span>
+    <p class="dropzone-label">Drop audio file here or <span>browse</span></p>
+    <p class="file-name" id="fileName"></p>
+  </div>
+
+  <div class="section-divider">or record</div>
+
+  <!-- Record -->
+  <div class="record-area">
+    <button id="recordBtn" title="Start recording">
+      <!-- mic icon -->
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0d0d0d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 1a4 4 0 0 1 4 4v7a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4z"/>
+        <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+        <line x1="12" y1="19" x2="12" y2="23"/>
+        <line x1="8" y1="23" x2="16" y2="23"/>
+      </svg>
+    </button>
+    <div class="record-info">
+      <p class="rec-label">Microphone</p>
+      <p class="rec-status" id="recStatus">Click to start recording</p>
+      <p id="timer">00:00</p>
+    </div>
+  </div>
+
+  <button id="submitBtn" disabled>Transcribe</button>
+  <p id="status"></p>
+  <div id="error"></div>
+
+  <div id="result">
+    <div class="result-header">
+      <div class="result-meta">
+        Language: <span id="langLabel">—</span>
+        &nbsp;·&nbsp;
+        Duration: <span id="durationLabel">—</span>
+      </div>
+      <button id="copyBtn">Copy</button>
+    </div>
+    <div id="transcript"></div>
+  </div>
+</main>
+
+<div class="api-hint">
+  <h2>API — curl example</h2>
+  <pre><span class="kw">curl</span> -X POST <span class="str">http://localhost:8000/transcribe</span> \
+  -F <span class="str">"file=@your_audio.mp3"</span></pre>
+</div>
+
+<script>
+  const fileInput = document.getElementById('fileInput');
+  const dropzone = document.getElementById('dropzone');
+  const fileName = document.getElementById('fileName');
+  const recordBtn = document.getElementById('recordBtn');
+  const recStatus = document.getElementById('recStatus');
+  const timer = document.getElementById('timer');
+  const submitBtn = document.getElementById('submitBtn');
+  const status = document.getElementById('status');
+  const result = document.getElementById('result');
+  const transcript = document.getElementById('transcript');
+  const langLabel = document.getElementById('langLabel');
+  const durationLabel = document.getElementById('durationLabel');
+  const copyBtn = document.getElementById('copyBtn');
+  const errorBox = document.getElementById('error');
+
+  let audioBlob = null;
+  let mediaRecorder = null;
+  let recordingInterval = null;
+  let seconds = 0;
+
+  // --- File upload ---
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files[0]) {
+      audioBlob = fileInput.files[0];
+      fileName.textContent = fileInput.files[0].name;
+      fileName.style.display = 'block';
+      submitBtn.disabled = false;
+      clearRecording();
+    }
+  });
+
+  dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('dragover'); });
+  dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+  dropzone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropzone.classList.remove('dragover');
+    const f = e.dataTransfer.files[0];
+    if (f && f.type.startsWith('audio/')) {
+      audioBlob = f;
+      fileName.textContent = f.name;
+      fileName.style.display = 'block';
+      submitBtn.disabled = false;
+      clearRecording();
+    }
+  });
+
+  // --- Recording ---
+  recordBtn.addEventListener('click', async () => {
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+      mediaRecorder.stop();
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const chunks = [];
+      mediaRecorder = new MediaRecorder(stream);
+      mediaRecorder.ondataavailable = e => chunks.push(e.data);
+      mediaRecorder.onstop = () => {
+        audioBlob = new Blob(chunks, { type: 'audio/webm' });
+        stream.getTracks().forEach(t => t.stop());
+        recordBtn.classList.remove('recording');
+        recStatus.textContent = 'Recording ready';
+        timer.style.display = 'none';
+        clearInterval(recordingInterval);
+        submitBtn.disabled = false;
+        fileName.style.display = 'none';
+      };
+      mediaRecorder.start();
+      recordBtn.classList.add('recording');
+      recStatus.textContent = 'Recording…';
+      seconds = 0;
+      timer.style.display = 'block';
+      timer.textContent = '00:00';
+      recordingInterval = setInterval(() => {
+        seconds++;
+        const m = String(Math.floor(seconds / 60)).padStart(2, '0');
+        const s = String(seconds % 60).padStart(2, '0');
+        timer.textContent = `${m}:${s}`;
+      }, 1000);
+    } catch (e) {
+      recStatus.textContent = 'Microphone access denied';
+    }
+  });
+
+  function clearRecording() {
+    if (mediaRecorder && mediaRecorder.state === 'recording') mediaRecorder.stop();
+    recStatus.textContent = 'Click to start recording';
+    timer.style.display = 'none';
+    clearInterval(recordingInterval);
+    recordBtn.classList.remove('recording');
+  }
+
+  // --- Transcribe ---
+  submitBtn.addEventListener('click', async () => {
+    if (!audioBlob) return;
+
+    submitBtn.disabled = true;
+    result.style.display = 'none';
+    errorBox.style.display = 'none';
+    status.style.display = 'block';
+    status.textContent = '⏳ Transcribing…';
+
+    const formData = new FormData();
+    formData.append('file', audioBlob, audioBlob.name || 'recording.webm');
+
+    try {
+      const res = await fetch('/transcribe', { method: 'POST', body: formData });
+      const data = await res.json();
+
+      if (!res.ok) throw new Error(data.detail || 'Unknown error');
+
+      transcript.textContent = data.transcript || '(no speech detected)';
+      langLabel.textContent = data.language;
+      durationLabel.textContent = data.duration ? `${data.duration.toFixed(1)}s` : '—';
+      result.style.display = 'block';
+      status.style.display = 'none';
+    } catch (e) {
+      errorBox.textContent = `Error: ${e.message}`;
+      errorBox.style.display = 'block';
+      status.style.display = 'none';
+    } finally {
+      submitBtn.disabled = false;
+    }
+  });
+
+  // --- Copy ---
+  copyBtn.addEventListener('click', () => {
+    navigator.clipboard.writeText(transcript.textContent);
+    copyBtn.textContent = 'Copied!';
+    setTimeout(() => copyBtn.textContent = 'Copy', 1500);
+  });
+</script>
+
+</body>
+</html>
