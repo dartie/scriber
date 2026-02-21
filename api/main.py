@@ -2,6 +2,7 @@ import os
 import tempfile
 import asyncio
 import logging
+import httpx
 
 import whisper
 from fastapi import FastAPI, UploadFile, File, HTTPException
@@ -13,10 +14,43 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "base")
+OLLAMA_URL = os.environ.get("OLLAMA_URL")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.2")
 
 logger.info(f"Loading Whisper model: {WHISPER_MODEL}")
 model = whisper.load_model(WHISPER_MODEL)
 logger.info("Model ready.")
+
+if OLLAMA_URL:
+    logger.info(f"Summarization enabled via Ollama at {OLLAMA_URL} using {OLLAMA_MODEL}")
+else:
+    logger.info("Summarization disabled — OLLAMA_URL not set")
+
+
+def summarize(transcript: str) -> str | None:
+    if not OLLAMA_URL:
+        return None
+    try:
+        response = httpx.post(
+            f"{OLLAMA_URL}/api/generate",
+            json={
+                "model": OLLAMA_MODEL,
+                "prompt": (
+                    "Summarize the following voice message transcript in 2-3 sentences. "
+                    "Be concise and capture the key points. "
+                    "Reply with the summary only, no preamble.\n\n"
+                    f"Transcript:\n{transcript}"
+                ),
+                "stream": False,
+            },
+            timeout=120,
+        )
+        response.raise_for_status()
+        return response.json()["response"].strip()
+    except Exception as e:
+        logger.error(f"Summarization error: {e}")
+        return None
+
 
 app = FastAPI(title="Whisper Transcription API")
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -24,6 +58,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 class TranscriptionResult(BaseModel):
     transcript: str
+    summary: str | None = None
     language: str
     duration: float
 
@@ -47,8 +82,13 @@ async def transcribe(file: UploadFile = File(...)):
         result = await loop.run_in_executor(
             None, lambda: model.transcribe(tmp_path)
         )
+        transcript = result["text"].strip()
+
+        summary = await loop.run_in_executor(None, lambda: summarize(transcript))
+
         return TranscriptionResult(
-            transcript=result["text"].strip(),
+            transcript=transcript,
+            summary=summary,
             language=result.get("language", "unknown"),
             duration=result.get("segments", [{}])[-1].get("end", 0.0),
         )
@@ -61,5 +101,8 @@ async def transcribe(file: UploadFile = File(...)):
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "model": WHISPER_MODEL}
-
+    return {
+        "status": "ok",
+        "model": WHISPER_MODEL,
+        "summarization": OLLAMA_MODEL if OLLAMA_URL else "disabled",
+    }

@@ -56,14 +56,15 @@ async def transcribe_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
             data = response.json()
 
         transcript = data.get("transcript", "").strip()
+        summary = data.get("summary")
         language = data.get("language", "unknown")
         duration = data.get("duration", 0)
 
         if transcript:
-            await message.reply_text(
-                f"📝 *Transcript* (_{language}_, {duration:.1f}s):\n\n{transcript}",
-                parse_mode="Markdown",
-            )
+            text = f"📝 *Transcript* (_{language}_, {duration:.1f}s):\n{transcript}"
+            if summary:
+                text += f"\n\n💬 *Summary:*\n{summary}"
+            await message.reply_text(text, parse_mode="Markdown")
         else:
             await message.reply_text("⚠️ Couldn't detect any speech in the audio.")
 
@@ -88,4 +89,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

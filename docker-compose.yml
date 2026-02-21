@@ -1,12 +1,21 @@
 services:
+  ollama:                          # optional — remove if you don't want summarization
+    image: ollama/ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ./ollama:/root/.ollama:Z
+
   whisper-api:
     build: ./api
     ports:
       - "8000:8000"
     environment:
       - WHISPER_MODEL=${WHISPER_MODEL:-base}
+      - OLLAMA_URL=${OLLAMA_URL:-}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.2}
     volumes:
-      - ./cache/whisper:/root/.cache/whisper
+      - ./cache/whisper:/root/.cache/whisper:Z
 
   telegram-bot:
     build: ./bot
